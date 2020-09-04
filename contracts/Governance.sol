@@ -362,27 +362,29 @@ contract Governance is IGovernance, Iupgradable {
         ) {
             voteId = allVotesByMember[leader][i];
             proposalId = allVotes[voteId].proposalId;
-            if (
-                proposalVoteTally[proposalId].voters > 0 &&
-                (allVotes[voteId].dateAdd > (lastUpd.add(tokenHoldingTime)) ||
-                    leader == _memberAddress)
-            ) {
+            if(memberProposalVote[_memberAddress][proposalId] == voteId) {
                 if (
-                    allProposalData[proposalId].propStatus >
-                    uint256(ProposalStatus.VotingStarted)
+                    proposalVoteTally[proposalId].voters > 0 &&
+                    (allVotes[voteId].dateAdd > (lastUpd.add(tokenHoldingTime)) ||
+                        leader == _memberAddress)
                 ) {
-                    if (!rewardClaimed[voteId][_memberAddress]) {
-                        pendingDAppReward = pendingDAppReward.add(
-                            allProposalData[proposalId].commonIncentive.div(
-                                proposalVoteTally[proposalId].voters
-                            )
-                        );
-                        rewardClaimed[voteId][_memberAddress] = true;
-                        j++;
-                    }
-                } else {
-                    if (lastClaimed == totalVotes) {
-                        lastClaimed = i;
+                    if (
+                        allProposalData[proposalId].propStatus >
+                        uint256(ProposalStatus.VotingStarted)
+                    ) {
+                        if (!rewardClaimed[voteId][_memberAddress]) {
+                            pendingDAppReward = pendingDAppReward.add(
+                                allProposalData[proposalId].commonIncentive.div(
+                                    proposalVoteTally[proposalId].voters
+                                )
+                            );
+                            rewardClaimed[voteId][_memberAddress] = true;
+                            j++;
+                        }
+                    } else {
+                        if (lastClaimed == totalVotes) {
+                            lastClaimed = i;
+                        }
                     }
                 }
             }
@@ -653,31 +655,34 @@ contract Governance is IGovernance, Iupgradable {
         } else leader = _memberAddress;
 
         uint256 proposalId;
+        uint256 voteId;
         for (
             uint256 i = lastRewardClaimed[_memberAddress];
             i < allVotesByMember[leader].length;
             i++
         ) {
-            if (
-                allVotes[allVotesByMember[leader][i]].dateAdd >
-                (lastUpd.add(tokenHoldingTime)) ||
-                leader == _memberAddress
-            ) {
+            voteId = allVotesByMember[leader][i];
+            proposalId = allVotes[voteId].proposalId;
+            if(memberProposalVote[_memberAddress][proposalId] == voteId) {
                 if (
-                    !rewardClaimed[allVotesByMember[leader][i]][_memberAddress]
+                    allVotes[voteId].dateAdd >
+                    (lastUpd.add(tokenHoldingTime)) ||
+                    leader == _memberAddress
                 ) {
-                    proposalId = allVotes[allVotesByMember[leader][i]]
-                        .proposalId;
                     if (
-                        proposalVoteTally[proposalId].voters > 0 &&
-                        allProposalData[proposalId].propStatus >
-                        uint256(ProposalStatus.VotingStarted)
+                        !rewardClaimed[voteId][_memberAddress]
                     ) {
-                        pendingDAppReward = pendingDAppReward.add(
-                            allProposalData[proposalId].commonIncentive.div(
-                                proposalVoteTally[proposalId].voters
-                            )
-                        );
+                        if (
+                            proposalVoteTally[proposalId].voters > 0 &&
+                            allProposalData[proposalId].propStatus >
+                            uint256(ProposalStatus.VotingStarted)
+                        ) {
+                            pendingDAppReward = pendingDAppReward.add(
+                                allProposalData[proposalId].commonIncentive.div(
+                                    proposalVoteTally[proposalId].voters
+                                )
+                            );
+                        }
                     }
                 }
             }
@@ -1022,15 +1027,15 @@ contract Governance is IGovernance, Iupgradable {
                     ), "Not locked"
             );
         }
-        uint256 totalVotes = allVotes.length;
+        uint256 voteId = allVotes.length;
 
-        allVotesByMember[msg.sender].push(totalVotes);
-        memberProposalVote[msg.sender][_proposalId] = totalVotes;
+        allVotesByMember[msg.sender].push(voteId);
+        memberProposalVote[msg.sender][_proposalId] = voteId;
         tokenController.lockForGovernanceVote(msg.sender, tokenHoldingTime);
 
-        emit Vote(msg.sender, _proposalId, totalVotes, now, _solution);
+        emit Vote(msg.sender, _proposalId, voteId, now, _solution);
         uint256 numberOfMembers = memberRole.numberOfMembers(mrSequence);
-        _setVoteTally(_proposalId, _solution, mrSequence);
+        _setVoteTally(_proposalId, _solution, mrSequence, voteId);
 
         if (
             numberOfMembers == proposalVoteTally[_proposalId].voters &&
@@ -1043,7 +1048,8 @@ contract Governance is IGovernance, Iupgradable {
     function _setVoteTally(
         uint256 _proposalId,
         uint256 _solution,
-        uint256 mrSequence
+        uint256 mrSequence,
+        uint256 voteId
     ) internal {
         uint256 voters = 1;
         uint256 voteWeight;
@@ -1076,6 +1082,7 @@ contract Governance is IGovernance, Iupgradable {
                             delegationData.follower,
                             tokenHoldingTime
                         );
+                        memberProposalVote[delegationData.follower][_proposalId] = voteId;
                         voters++;
                         voteWeight = voteWeight.add(tokenBalance);
                     }

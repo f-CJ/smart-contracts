@@ -29,9 +29,11 @@ let mr;
 let nxmToken;
 let tc;
 let td;
+let accounts = [];
 
 contract("Governance", ([ab1, ab2, ab3, ab4, mem1, mem2, mem3, mem4, mem5, mem6, mem7, notMember, dr1, dr2, dr3]) => {
   before(async function () {
+    accounts = [ab1, ab2, ab3, ab4, mem1, mem2, mem3, mem4, mem5, mem6, mem7, notMember, dr1, dr2, dr3];
     nxms = await OwnedUpgradeabilityProxy.deployed();
     nxms = await NXMaster.at(nxms.address);
     nxmToken = await PlotusToken.deployed();
@@ -538,5 +540,50 @@ contract("Governance", ([ab1, ab2, ab3, ab4, mem1, mem2, mem3, mem4, mem5, mem6,
       await gv.triggerAction(pId);
       await assertRevert(gv.delegateVote(ab1, { from: mem6 }));
     });
+    it("Claim all pending rewards", async function() {
+      pId = (await gv.getProposalLength()).toNumber();
+      await gv.createProposal("Proposal2", "Proposal2", "Proposal2", 0); //Pid 3
+      await gv.categorizeProposal(pId, 13, 0);
+      let actionHash = encode("updateUintParameters(bytes8,uint)", "MAXFOL", 50);
+      await gv.submitProposalWithSolution(pId, "update max followers limit", actionHash);
+      await gv.submitVote(pId, 1, { from: ab1 });
+      await gv.submitVote(pId, 1, { from: ab2 });
+      await gv.submitVote(pId, 1, { from: ab3 });
+      await gv.submitVote(pId, 1, { from: mem2 });
+      await gv.submitVote(pId, 1, { from: mem3 });
+      await gv.submitVote(pId, 1, { from: mem6 });
+      await increaseTime(604810);
+      await gv.closeProposal(pId);
+      await increaseTime(604810);
+      await gv.triggerAction(pId);
+      await increaseTime(604810);
+      for(let i = 0;i<10;i++) {
+        await gv.claimReward(accounts[i], 20);
+      }
+      await increaseTime(604810);
+    });
+    it("Token holder delegates his vote and transfer tokens to another address, Should not get rewards", async function() {
+      await gv.delegateVote(ab1, {from: mem2});
+      let mem2BalanceBefore = await nxmToken.balanceOf(mem2);
+      let mem3BalanceBefore = await nxmToken.balanceOf(mem3);
+      await nxmToken.transfer(mem3, mem2BalanceBefore, {from:mem2});
+      let mem2Balance = await nxmToken.balanceOf(mem2);
+      console.log(mem2Balance);
+      await gv.delegateVote(ab1, {from: mem3});
+      pId = await gv.getProposalLength();
+      let action = "updateUintParameters(bytes8,uint)";
+      let code = "MAXFOL";
+      let proposedValue = 50;
+      let actionHash = encode(action, code, proposedValue);
+      await increaseTime(604810);
+      await gvProposalWithIncentiveViaTokenHolder(12, actionHash, mr, gv, 2, 1000);
+      await increaseTime(604810);
+      let mem2Reward = await gv.getPendingReward(mem2);
+      let mem3Reward = await gv.getPendingReward(mem3);
+      console.log(mem2Reward/1);
+      console.log(mem3Reward/1);
+      assert.equal(mem2Reward/1, 0);
+      assert.notEqual(mem3Reward/1, 0);
+    })
   });
 });
