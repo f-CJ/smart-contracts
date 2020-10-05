@@ -109,15 +109,19 @@ describe("1. Players are incentivized to stake DAO tokens to earn a multiplier o
 			// await marketInstance.setMockPriceFlag(false);
 			await increaseTime(10001);
 			assert.ok(marketInstance);
-			await plotusToken.approve(tokenController.address, "10000000000000000000000");
+			await plotusToken.approve(tokenController.address, "10000000000000000000000", { from: user1 });
 			await tokenController.lock("0x534d", "1100000000000000000000", 86400 * 30, { from: user1 });
 			await plotusToken.transfer(user2, "2500000000000000000000");
+			await plotusToken.approve(tokenController.address, "10000000000000000000000", { from: user2 });
 			await tokenController.lock("0x534d", "1600000000000000000000", 86400 * 30, { from: user2 });
 			await plotusToken.transfer(user3, "2500000000000000000000");
+			await plotusToken.approve(tokenController.address, "10000000000000000000000", { from: user3 });
 			await tokenController.lock("0x534d", "1100000000000000000000", 86400 * 30, { from: user3 });
 			await plotusToken.transfer(user4, "2500000000000000000000");
+			await plotusToken.approve(tokenController.address, "10000000000000000000000", { from: user4 });
 			await tokenController.lock("0x534d", "1100000000000000000000", 86400 * 30, { from: user4 });
 			await plotusToken.transfer(user5, "2500000000000000000000");
+			await plotusToken.approve(tokenController.address, "10000000000000000000000", { from: user5 });
 			await tokenController.lock("0x534d", "1100", 86400 * 30, { from: user5 });
 
 			await marketConfig.setOptionPrice(1, 9);
@@ -283,18 +287,23 @@ describe("2. Place prediction with ETH and check multiplier ", () => {
 			await marketConfig.setOptionPrice(3, 27);
 		});
 		it("2.2", async () => {
+			await plotusToken.approve(tokenController.address, "1000000000000000000000000", { from: user1 });
 			await tokenController.lock("0x534d", web3.utils.toWei("110000"), 86400 * 30, { from: user1 });
 
 			await plotusToken.transfer(user2, web3.utils.toWei("1000"));
+			await plotusToken.approve(tokenController.address, "1000000000000000000000000", { from: user2 });
 			await tokenController.lock("0x534d", web3.utils.toWei("1000"), 86400 * 30, { from: user2 });
 
 			await plotusToken.transfer(user3, web3.utils.toWei("100000"));
+			await plotusToken.approve(tokenController.address, "1000000000000000000000000", { from: user3 });
 			await tokenController.lock("0x534d", web3.utils.toWei("100000"), 86400 * 30, { from: user3 });
 
 			await plotusToken.transfer(user4, web3.utils.toWei("200000"));
+			await plotusToken.approve(tokenController.address, "1000000000000000000000000", { from: user4 });
 			await tokenController.lock("0x534d", web3.utils.toWei("200000"), 86400 * 30, { from: user4 });
 
 			await plotusToken.transfer(user5, web3.utils.toWei("11000"));
+			await plotusToken.approve(tokenController.address, "1000000000000000000000000", { from: user5 });
 			await tokenController.lock("0x534d", web3.utils.toWei("11000"), 86400 * 30, { from: user5 });
 
 			await marketInstance.placePrediction("0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE", web3.utils.toWei("10"), 1, 4, {
@@ -348,7 +357,7 @@ describe("2. Place prediction with ETH and check multiplier ", () => {
 	});
 });
 
-describe("3. Multiple Option bets", () => {
+describe("3. Multiple Option predictions", () => {
 	contract("Market", async function([user1, user2, user3, user4, user5]) {
 		let masterInstance, marketConfig, plotusToken, tokenControllerAdd, tokenController, plotusNewAddress, plotusNewInstance;
 		before(async () => {
@@ -950,8 +959,8 @@ describe("4. New cases", () => {
             assert.equal((newOwnerBalance3 - oldOwnerBalance3).toFixed(2), (0).toFixed(2));
 
             assert.equal((newOwnerETHBalance1 - oldOwnerETHBalance1).toFixed(2), (7.992).toFixed(2));
-			assert.equal((newOwnerETHBalance2 - oldOwnerETHBalance2).toFixed(2), (3.1968).toFixed(2));
-            assert.equal((newOwnerETHBalance3 - oldOwnerETHBalance3).toFixed(2), (4.7952).toFixed(2));
+			expect((newOwnerETHBalance2 - oldOwnerETHBalance2)).to.be.closeTo(3.19, 3.2);//3.1968
+			expect((newOwnerETHBalance3 - oldOwnerETHBalance3)).to.be.closeTo(4.7, 4.8);//4.7952
             
             await increaseTime(60*60*24*2);
             await dailyMarketInstance.calculatePredictionResult(1);
@@ -982,9 +991,9 @@ describe("4. New cases", () => {
 			assert.equal((newOwnerBalance2 - oldOwnerBalance2).toFixed(2), (239.88).toFixed(2));
             assert.equal((newOwnerBalance3 - oldOwnerBalance3).toFixed(2), (150.9293638).toFixed(2));
 
-            assert.equal((newOwnerETHBalance1 - oldOwnerETHBalance1).toFixed(2), (2.487461386).toFixed(2));
+			expect((newOwnerETHBalance1 - oldOwnerETHBalance1)).to.be.closeTo(2.2, 2.3);//2.487461386
 			assert.equal((newOwnerETHBalance2 - oldOwnerETHBalance2).toFixed(2), (0).toFixed(2));
-            assert.equal((newOwnerETHBalance3 - oldOwnerETHBalance3).toFixed(2), (5.504538614).toFixed(2));
+			expect((newOwnerETHBalance3 - oldOwnerETHBalance3)).to.be.closeTo(5.5, 5.6);//5.504538614
 
 		});
 	});

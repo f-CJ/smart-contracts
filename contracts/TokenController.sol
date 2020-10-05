@@ -116,7 +116,7 @@ contract TokenController is IERC1132, Governed, Iupgradable {
 
         lockReason[msg.sender].push(_reason);
 
-        token.operatorTransfer(msg.sender, _amount);
+        require(token.transferFrom(msg.sender, address(this), _amount));
 
         locked[msg.sender][_reason] = LockToken(_amount, validUntil, false);
 
@@ -191,7 +191,7 @@ contract TokenController is IERC1132, Governed, Iupgradable {
         require(_reason == "SM" || _reason == "DR","Unspecified reason");
         require(_amount != 0, AMOUNT_ZERO);
         require(tokensLocked(msg.sender, _reason) > 0, NOT_LOCKED);
-        token.operatorTransfer(msg.sender, _amount);
+        require(token.transferFrom(msg.sender, address(this), _amount));
 
         locked[msg.sender][_reason].amount = locked[msg.sender][_reason].amount.add(_amount);
         if(_reason == "SM") {
@@ -280,16 +280,6 @@ contract TokenController is IERC1132, Governed, Iupgradable {
         }  
     }
 
-
-    /**
-    * @dev Mints new token for an address
-    * @param _member address to reward the minted tokens
-    * @param _amount number of tokens to mint
-    */
-    function mint(address _member, uint _amount) public onlyAuthorizedToGovern {
-        token.mint(_member, _amount);
-    }
-
     /**
      * @dev Lock the user's tokens
      * @param _of user's address.
@@ -303,7 +293,7 @@ contract TokenController is IERC1132, Governed, Iupgradable {
         returns (bool)
     {
         require(_reason == "DR","Reason must be DR");
-        uint256 amount = tokensLocked(_of, _reason);
+        uint256 amount = tokensLockedAtTime(_of, _reason, now);
         require(amount >= _amount, "Tokens locked must be greater than amount");
 
         locked[_of][_reason].amount = locked[_of][_reason].amount.sub(_amount);

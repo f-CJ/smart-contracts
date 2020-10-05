@@ -21,12 +21,14 @@ contract IMarketRegistry {
 
     function isWhitelistedSponsor(address _address) public view returns(bool);
 
+    function transferAssets(address _asset, address _to, uint _amount) external;
+
     /**
     * @dev Initialize the PlotX.
     * @param _marketConfig The address of market config.
     * @param _plotToken The address of PLOT token.
     */
-    function initiate(address _marketConfig, address _plotToken, address payable[] memory _configParams) public;
+    function initiate(address _defaultAddress, address _marketConfig, address _plotToken, address payable[] memory _configParams) public;
 
     /**
     * @dev Create proposal if user wants to raise the dispute.
@@ -68,6 +70,6 @@ contract IMarketRegistry {
     * @param _winningOption The winning option of the market.
     * @param _closeValue The closing value of the market currency.
     */
-    function callMarketResultEvent(uint[] memory _totalReward, uint _winningOption, uint _closeValue, uint _tokenAmountToPool, uint roundId) public {
+    function callMarketResultEvent(uint[] memory _totalReward, uint _winningOption, uint _closeValue, uint roundId) public {
     }
 }

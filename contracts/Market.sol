@@ -176,7 +176,7 @@ contract Market {
       
     }
 
-    function getTotalAssetsStaked() internal view returns(uint256 ethStaked, uint256 plotStaked) {
+    function getTotalAssetsStaked() public view returns(uint256 ethStaked, uint256 plotStaked) {
       for(uint256 i = 1; i<= totalOptions;i++) {
         ethStaked = ethStaked.add(optionsAvailable[i].assetStaked[ETH_ADDRESS]);
         plotStaked = plotStaked.add(optionsAvailable[i].assetStaked[plotToken]);
@@ -218,7 +218,7 @@ contract Market {
       require(now >= marketSettleTime(),"Time not reached");
       require(_value > 0,"value should be greater than 0");
       uint riskPercentage;
-      ( , riskPercentage, ) = marketUtility.getBasicMarketDetails();
+      ( , riskPercentage, , ) = marketUtility.getBasicMarketDetails();
       predictionStatus = PredictionStatus.Settled;
       if(marketStatus() != PredictionStatus.InDispute) {
         marketSettleData.settleTime = uint64(now);
@@ -255,7 +255,9 @@ contract Market {
       }
       _transferAsset(ETH_ADDRESS, address(marketRegistry), ethAmountToPool.add(ethCommissionAmount));
       _transferAsset(plotToken, address(marketRegistry), tokenAmountToPool.add(plotCommissionAmount));
-      marketRegistry.callMarketResultEvent(rewardToDistribute, marketSettleData.WinningOption, _value, tokenAmountToPool, _roundId);
+      delete ethCommissionAmount;
+      delete plotCommissionAmount;
+      marketRegistry.callMarketResultEvent(rewardToDistribute, marketSettleData.WinningOption, _value, _roundId);
     }
 
     function _calculatePercentage(uint256 _percent, uint256 _value, uint256 _divisor) internal pure returns(uint256) {
@@ -275,6 +277,8 @@ contract Market {
       require(IToken(plotToken).transferFrom(msg.sender, address(marketRegistry), _stakeForDispute));
       lockedForDispute = true;
       marketRegistry.createGovernanceProposal(proposalTitle, description, solutionHash, abi.encode(address(this), proposedValue), _stakeForDispute, msg.sender, ethAmountToPool, tokenAmountToPool, proposedValue);
+      delete ethAmountToPool;
+      delete tokenAmountToPool;
       predictionStatus = PredictionStatus.InDispute;
     }
 
@@ -284,9 +288,8 @@ contract Market {
     * @param finalResult The final correct value of market currency.
     */
     function resolveDispute(bool accepted, uint256 finalResult) external payable {
-      require(msg.sender == address(marketRegistry));
+      require(msg.sender == address(marketRegistry) && marketStatus() == PredictionStatus.InDispute);
       if(accepted) {
-        require(marketStatus() == PredictionStatus.InDispute);
         _postResult(finalResult, 0);
       }
       lockedForDispute = false;
@@ -296,6 +299,7 @@ contract Market {
     function sponsorIncentives(address _token, uint256 _value) external {
       require(marketRegistry.isWhitelistedSponsor(msg.sender));
       require(marketStatus() <= PredictionStatus.InSettlement);
+      require(incentiveToken == address(0), "Already sponsored");
       incentiveToken = _token;
       incentiveToDistribute = _value;
       require(IToken(_token).transferFrom(msg.sender, address(this), _value));
@@ -338,14 +342,6 @@ contract Market {
           require(IToken(_asset).transfer(_recipient, _amount));
         }
       }
-    }
-
-
-    /**
-    * @dev Calculate the given asset value in eth 
-    */
-    function _calculateAssetValueInEth(uint _amount, uint _price, uint _decimals)internal pure returns(uint) {
-      return _amount.mul(_price).div(10**_decimals);
     }
 
     /**
@@ -532,7 +528,7 @@ contract Market {
     * @return _totalPredictionPoints uint representing the total positions of winners.
     */
     function _calculateUserReturn(address _user) internal view returns(uint[] memory _return, uint _totalUserPredictionPoints, uint _totalPredictionPoints){
-      ( , uint riskPercentage, ) = marketUtility.getBasicMarketDetails();
+      ( , uint riskPercentage, , ) = marketUtility.getBasicMarketDetails();
       _return = new uint256[](2);
       for(uint  i=1;i<=totalOptions;i++){
         _totalUserPredictionPoints = _totalUserPredictionPoints.add(userData[_user].predictionPoints[i]);

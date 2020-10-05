@@ -14,6 +14,10 @@ contract MockConfig is MarketUtility {
 		super.initialize(_addressParams);
 	}
 
+    function setWeth(address _weth) external {
+        weth = _weth;
+    }
+
 	function setPrice(uint _newPrice) external {
 		priceOfToken = _newPrice;
 	}
@@ -31,6 +35,12 @@ contract MockConfig is MarketUtility {
             // _value = output[1];
         }
         return (minStakeForMultiplier, _value);
+    }
+
+    /**
+     * @dev Internal function to update pair cummulative price
+     **/
+    function _setCummulativePrice() internal {
     }
 
     function update() external {

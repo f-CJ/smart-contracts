@@ -11,6 +11,7 @@ const MockchainLink = artifacts.require('MockChainLinkAggregator');
 const OwnedUpgradeabilityProxy = artifacts.require('OwnedUpgradeabilityProxy');
 const gvProposal = require('./utils/gvProposal.js').gvProposalWithIncentiveViaTokenHolder;
 const encode = require('./utils/encoder.js').encode;
+const assertRevert = require("./utils/assertRevert").assertRevert;
 const {toHex, toWei, toChecksumAddress} = require('./utils/ethTools');
 const { takeSnapshot, revertSnapshot } = require('./utils/snapshot');
 
@@ -121,34 +122,46 @@ contract('Configure Global Parameters', accounts => {
 
     describe('Update Market Config Params', function() {
 
+      it('Should update market creation incentive', async function() {
+        await updateParameter(20, 2, 'MCRINC', pl, 'configUint', 100);
+        let configData = await pl.getUintParameters(toHex('MCRINC'));
+        assert.equal(configData[1], 100, 'Not updated');
+      });
+
       it('Should update STAKE WEIGHTAGE', async function() {
         await updateParameter(20, 2, 'SW', pl, 'configUint', 60);
-        let configData = await marketConfig.getPriceCalculationParams(feedInstance.address, true);
+        let configData = await marketConfig.getPriceCalculationParams(feedInstance.address);
         assert.equal(configData[0], 60, 'Not updated');
       });
 
       it('Should not update STAKE WEIGHTAGE if passed value > 100', async function() {
         await updateParameter(20, 2, 'SW', pl, 'configUint', 200);
-        let configData = await marketConfig.getPriceCalculationParams(feedInstance.address, true);
+        let configData = await marketConfig.getPriceCalculationParams(feedInstance.address);
         assert.notEqual(configData[0], 200, 'updated');
       });
 
       it('Should update STAKE WEIGHTAGE MIN AMOUNT', async function() {
         await updateParameter(20, 2, 'SWMA', pl, 'configUint', toWei(100));
-        let configData = await marketConfig.getPriceCalculationParams(feedInstance.address, true);
+        let configData = await marketConfig.getPriceCalculationParams(feedInstance.address);
         assert.equal(configData[1], toWei(100), 'Not updated');
       });
 
       it('Should update Min Time Elapsed Divisor', async function() {
         await updateParameter(20, 2, 'MTED', pl, 'configUint', toWei(10));
-        let configData = await marketConfig.getPriceCalculationParams(feedInstance.address, true);
+        let configData = await marketConfig.getPriceCalculationParams(feedInstance.address);
         assert.equal(configData[3], toWei(10), 'Not updated');
       });
 
-      it('Should update Min Bet', async function() {
-        await updateParameter(20, 2, 'MINBET', pl, 'configUint', toWei(120));
+      it('Should update Min PredictionAmount', async function() {
+        await updateParameter(20, 2, 'MINPRD', pl, 'configUint', toWei(120));
         let configData = await marketConfig.getBasicMarketDetails();
         assert.equal(configData[0], toWei(120), 'Not updated');
+      });
+
+      it('Should update Max PredictionAmount', async function() {
+        await updateParameter(20, 2, 'MAXPRD', pl, 'configUint', toWei(120));
+        let configData = await marketConfig.getBasicMarketDetails();
+        assert.equal(configData[3], toWei(120), 'Not updated');
       });
 
       it('Should update Position Decimals', async function() {
@@ -183,6 +196,9 @@ contract('Configure Global Parameters', accounts => {
         await updateParameter(21, 2, 'CLORCLE', pl, 'configAddress', pl.address);
         let configData = await marketConfig.getFeedAddresses();
         assert.equal(configData[0], pl.address, 'Not updated');
+      });
+      it('Should not allow to update if unauthorized call', async function() {
+        await assertRevert(marketConfig.updateAddressParameters(toHex("CLORCLE"),pl.address));
       });
 
       it('Should update Uniswap Factory', async function() {
@@ -228,6 +244,9 @@ contract('Configure Global Parameters', accounts => {
       it('Should update Vote Perc Reject Action', async function() {
         await updateParameter(13, 2, 'REJCOUNT', gv, 'uint', '123');
       });
+      it('Should update max vote weigthage percent', async function() {
+        await updateParameter(13, 2, 'MAXVW', gv, 'uint', '43');
+      });  
       it('Should not update if parameter code is incorrect', async function() {
         await updateInvalidParameter(13, 2, 'EPTIM', gv, 'uint', '86400');
       });

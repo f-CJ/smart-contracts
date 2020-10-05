@@ -35,9 +35,9 @@ contract MarketUtility {
     uint256 internal STAKE_WEIGHTAGE;
     uint256 internal STAKE_WEIGHTAGE_MIN_AMOUNT;
     uint256 internal minTimeElapsedDivisor;
-    uint256 internal minBet;
+    uint256 internal minPredictionAmount;
+    uint256 internal maxPredictionAmount;
     uint256 internal positionDecimals;
-    uint256 internal multiplier;
     uint256 internal minStakeForMultiplier;
     uint256 internal riskPercentage;
     uint256 internal tokenStakeForDispute;
@@ -55,6 +55,7 @@ contract MarketUtility {
         FixedPoint.uq112x112 price1Average;
         uint256 price1CumulativeLast;
         uint32 blockTimestampLast;
+        bool initialized;
     }
 
     mapping(address => UniswapPriceData) internal uniswapPairData;
@@ -87,6 +88,8 @@ contract MarketUtility {
         plotETHpair = uniswapFactory.getPair(plotToken, weth);
 
         chainLinkOracle = IChainLinkOracle(chainLinkPriceOracle);
+
+        _setCummulativePrice();
     }
 
     /**
@@ -96,9 +99,9 @@ contract MarketUtility {
         STAKE_WEIGHTAGE = 40; //
         STAKE_WEIGHTAGE_MIN_AMOUNT = 20 ether;
         minTimeElapsedDivisor = 6;
-        minBet = 1e15;
+        minPredictionAmount = 1e15;
+        maxPredictionAmount = 28 ether;
         positionDecimals = 1e2;
-        multiplier = 10;
         minStakeForMultiplier = 5e17;
         riskPercentage = 20;
         tokenStakeForDispute = 100 ether;
@@ -142,8 +145,10 @@ contract MarketUtility {
             STAKE_WEIGHTAGE_MIN_AMOUNT = value;
         } else if (code == "MTED") { // Minimum time elapsed divisor
             minTimeElapsedDivisor = value;
-        } else if (code == "MINBET") { // Minimum predictionamount
-            minBet = value;
+        } else if (code == "MINPRD") { // Minimum predictionamount
+            minPredictionAmount = value;
+        } else if (code == "MAXPRD") { // Minimum predictionamount
+            maxPredictionAmount = value;
         } else if (code == "PDEC") { // Position's Decimals
             positionDecimals = value;
         } else if (code == "MINSTM") { // Min stake required for applying multiplier
@@ -180,22 +185,15 @@ contract MarketUtility {
      * @dev Update cumulative price of token in uniswap
      **/
     function update() external onlyAuthorized {
-        _update(plotETHpair);
-    }
-
-    /**
-     * @dev Internal function to update pair cummulative price
-     **/
-    function _update(address pair) internal {
-        UniswapPriceData storage _priceData = uniswapPairData[pair];
+        UniswapPriceData storage _priceData = uniswapPairData[plotETHpair];
         (
             uint256 price0Cumulative,
             uint256 price1Cumulative,
             uint32 blockTimestamp
-        ) = UniswapV2OracleLibrary.currentCumulativePrices(pair);
+        ) = UniswapV2OracleLibrary.currentCumulativePrices(plotETHpair);
         uint32 timeElapsed = blockTimestamp - _priceData.blockTimestampLast; // overflow is desired
 
-        if (timeElapsed >= updatePeriod) {
+        if (timeElapsed >= updatePeriod || !_priceData.initialized) {
             // overflow is desired, casting never truncates
             // cumulative price is in (uq112x112 price * seconds) units so we simply wrap it after division by time elapsed
             _priceData.price0Average = FixedPoint.uq112x112(
@@ -214,7 +212,32 @@ contract MarketUtility {
             _priceData.price0CumulativeLast = price0Cumulative;
             _priceData.price1CumulativeLast = price1Cumulative;
             _priceData.blockTimestampLast = blockTimestamp;
+            if(!_priceData.initialized) {
+              _priceData.initialized = true;
+            }
         }
+    }
+
+    /**
+     * @dev Internal function to update pair cummulative price
+     **/
+    function _setCummulativePrice() internal {
+      UniswapPriceData storage _priceData = uniswapPairData[plotETHpair];
+      (
+          uint256 price0Cumulative,
+          uint256 price1Cumulative,
+          uint32 blockTimestamp
+      ) = UniswapV2OracleLibrary.currentCumulativePrices(plotETHpair);
+      _priceData.price0CumulativeLast = price0Cumulative;
+      _priceData.price1CumulativeLast = price1Cumulative;
+      _priceData.blockTimestampLast = blockTimestamp;
+    }
+
+    /**
+    * @dev Get decimals of given price feed address 
+    */
+    function getPriceFeedDecimals(address _priceFeed) public view returns(uint8) {
+      return IChainLinkOracle(_priceFeed).decimals();
     }
 
     /**
@@ -222,6 +245,7 @@ contract MarketUtility {
      * @return Minimum amount required to predict in market
      * @return Percentage of users leveraged amount to deduct when placed in wrong prediction
      * @return Decimal points for prediction positions
+     * @return Maximum prediction amount
      **/
     function getBasicMarketDetails()
         public
@@ -229,10 +253,11 @@ contract MarketUtility {
         returns (
             uint256,
             uint256,
+            uint256,
             uint256
         )
     {
-        return (minBet, riskPercentage, positionDecimals);
+        return (minPredictionAmount, riskPercentage, positionDecimals, maxPredictionAmount);
     }
 
     /**
@@ -274,9 +299,6 @@ contract MarketUtility {
     function getAssetPriceUSD(
         address _currencyFeedAddress
     ) public view returns (uint256 latestAnswer) {
-        if(_currencyFeedAddress == ETH_ADDRESS) {
-            return (uint256(chainLinkOracle.latestAnswer()))/1e8;
-        }
         return uint256(IChainLinkOracle(_currencyFeedAddress).latestAnswer());
     }
 
@@ -296,7 +318,7 @@ contract MarketUtility {
         while(currentRoundTime > _settleTime) {
             currentRoundId--;
             (currentRoundId, currentRoundAnswer, , currentRoundTime, )= IChainLinkOracle(_currencyFeedAddress).getRoundData(currentRoundId);
-            if(currentRoundTime < _settleTime) {
+            if(currentRoundTime <= _settleTime) {
                 break;
             }
         }
@@ -419,7 +441,7 @@ contract MarketUtility {
     */
     function calculatePredictionValue(uint[] memory params, address asset, address user, address marketFeedAddress, bool _checkMultiplier) public view returns(uint _predictionValue, bool _multiplierApplied) {
       uint _stakeValue = getAssetValueETH(asset, params[9]);
-      if(_stakeValue < minBet) {
+      if(_stakeValue < minPredictionAmount || _stakeValue > maxPredictionAmount) {
         return (_predictionValue, _multiplierApplied);
       }
       uint optionPrice;

@@ -4,6 +4,7 @@ const OwnedUpgradeabilityProxy = artifacts.require("OwnedUpgradeabilityProxy");
 const Market = artifacts.require("MockMarket");
 const Plotus = artifacts.require("MarketRegistry");
 const Master = artifacts.require("Master");
+const Airdrop = artifacts.require("Airdrop");
 const MarketConfig = artifacts.require("MockConfig");
 const PlotusToken = artifacts.require("MockPLOT");
 const BLOT = artifacts.require("BLOT");
@@ -13,11 +14,15 @@ const BigNumber = require("bignumber.js");
 const web3 = Market.web3;
 const increaseTime = require("./utils/increaseTime.js").increaseTime;
 const assertRevert = require("./utils/assertRevert.js").assertRevert;
+const latestTime = require("./utils/latestTime.js").latestTime;
+const { toHex, toWei } = require("./utils/ethTools.js");
+
+const nullAddress = "0x0000000000000000000000000000000000000000";
 // get etherum accounts
 // swap ether with LOT
-
-contract("Market", async function([user1, user2, user3, user4, user5, user6, user7, user8, user9, user10]) {
-	it("Place the bets with ether", async () => {
+let airdrop;
+contract("Airdrop", async function([user1, user2, user3, user4, user5, user6, user7, user8, user9, user10]) {
+	it("Place the prediction with ether", async () => {
 		masterInstance = await OwnedUpgradeabilityProxy.deployed();
 		masterInstance = await Master.at(masterInstance.address);
 		plotusToken = await PlotusToken.deployed();
@@ -29,6 +34,15 @@ contract("Market", async function([user1, user2, user3, user4, user5, user6, use
 		marketConfig = await MarketConfig.at(marketConfig);
 		// console.log(await plotusNewInstance.getOpenMarkets());
 		openMarkets = await plotusNewInstance.getOpenMarkets();
+		let  endDate = (await latestTime())/1+(24*3600);
+		airdrop = await Airdrop.new(plotusToken.address, BLOTInstance.address, endDate, toWei("1000"));
+
+		await BLOTInstance.addMinter(airdrop.address);
+
+		await plotusToken.transfer(airdrop.address,toWei("1000"));
+
+		await airdrop.airdropBLot([user2,user4],["400000000000000000000","124000000000000000000"]);
+
 
 		// console.log(`OpenMaket : ${openMarkets["_openMarkets"][0]}`);
 
@@ -73,7 +87,8 @@ contract("Market", async function([user1, user2, user3, user4, user5, user6, use
 		//   { from: user2 }
 		// );
 		await plotusToken.approve(BLOTInstance.address, "4000000000000000000000");
-		await BLOTInstance.mint(user2, "400000000000000000000");
+		// await BLOTInstance.mint(user2, "400000000000000000000");
+		await airdrop.claim({from:user2});
 
 		// await BLOTInstance.transferFrom(user1, user2, "500000000000000000000", {
 		//   from: user1,
@@ -111,7 +126,8 @@ contract("Market", async function([user1, user2, user3, user4, user5, user6, use
 		await marketConfig.setPrice("15000000000000000");
 
 		await plotusToken.approve(BLOTInstance.address, "124000000000000000000");
-		await BLOTInstance.mint(user4, "124000000000000000000");
+		// await BLOTInstance.mint(user4, "124000000000000000000");
+		await airdrop.claim({from:user4});
 
 		// await BLOTInstance.approve(openMarkets["_openMarkets"][0], "124000000000000000000", {
 		// 	from: user4,
@@ -124,7 +140,7 @@ contract("Market", async function([user1, user2, user3, user4, user5, user6, use
 
 		await marketInstance.placePrediction(BLOTInstance.address, "123000000000000000000", 3, 5, { from: user4 });
 
-		await assertRevert(marketInstance.placePrediction(BLOTInstance.address, "1000000000000000000", 3, 5, { from: user4 })); //should revert as once usr can only place bet with BLOT once in a market
+		await assertRevert(marketInstance.placePrediction(BLOTInstance.address, "1000000000000000000", 3, 5, { from: user4 })); //should revert as once usr can only place prediction with BLOT once in a market
 
 		// await plotusToken.transfer(user4, "200000000000000000000");
 
@@ -195,36 +211,36 @@ contract("Market", async function([user1, user2, user3, user4, user5, user6, use
 		});
 	});
 
-	it("1.Bet Points allocated properly in ether", async () => {
+	it("1.Prediction Points allocated properly in ether", async () => {
 		accounts = [user1, user2, user3, user4, user5, user6, user7, user8, user9, user10];
 		options = [2, 2, 2, 3, 1, 1, 2, 3, 3, 2];
-		getBetPoints = async (user, option, expected) => {
-			// return bet points of user
-			let betPoins = await marketInstance.getUserPredictionPoints(user, option);
-			betPoins = betPoins / 1;
-			return betPoins;
+		getPredictionPoints = async (user, option, expected) => {
+			// return Prediction points of user
+			let PredictionPoins = await marketInstance.getUserPredictionPoints(user, option);
+			PredictionPoins = PredictionPoins / 1;
+			return PredictionPoins;
 		};
-		betPointsExpected = [1.755503471, 238.3350545, 11.21889102, 556.4885586, 510.3, 1882.8, 116.5, 634.1, 37.0, 721.7];
+		PredictionPointsExpected = [1.755503471, 238.3350545, 11.21889102, 556.4885586, 510.3, 1882.8, 116.5, 634.1, 37.0, 721.7];
 
-		// console.log("bet points for user 1");
-		// betPointsUser1 = await getBetPoints(accounts[0], options[0]);
-		// betPointsUser3 = await getBetPoints(accounts[2], options[2]);
+		// console.log("Prediction points for user 1");
+		// PredictionPointsUser1 = await getPredictionPoints(accounts[0], options[0]);
+		// PredictionPointsUser3 = await getPredictionPoints(accounts[2], options[2]);
 
 		// console.log(
-		//   `bet points : ${betPointsUser1} expected : ${betPointsExpected[0]} `
+		//   `Prediction points : ${PredictionPointsUser1} expected : ${PredictionPointsExpected[0]} `
 		// );
-		// console.log("bet points for user 3");
+		// console.log("Prediction points for user 3");
 		// console.log(
-		//   `bet points : ${betPointsUser3} expected : ${betPointsExpected[2]} `
+		//   `Prediction points : ${PredictionPointsUser3} expected : ${PredictionPointsExpected[2]} `
 		// );
 		for (let index = 0; index < 10; index++) {
-			let betPoints = await getBetPoints(accounts[index], options[index]);
-			betPoints = betPoints / 1000;
-			betPoints = betPoints.toFixed(1);
-			assert.equal(betPoints, betPointsExpected[index].toFixed(1));
+			let PredictionPoints = await getPredictionPoints(accounts[index], options[index]);
+			PredictionPoints = PredictionPoints / 1000;
+			PredictionPoints = PredictionPoints.toFixed(1);
+			assert.equal(PredictionPoints, PredictionPointsExpected[index].toFixed(1));
 			// commented by parv (as already added assert above)
 			// console.log(`user${index + 1} : option : ${options[index]}  `);
-			// console.log(`bet points : ${betPoints} expected : ${betPointsExpected[index].toFixed(1)} `);
+			// console.log(`Prediction points : ${PredictionPoints} expected : ${PredictionPointsExpected[index].toFixed(1)} `);
 		}
 		// console.log(await plotusToken.balanceOf(user1));
 
@@ -259,7 +275,7 @@ contract("Market", async function([user1, user2, user3, user4, user5, user6, use
 		// console.log(`Difference : ${lotBalanceAfter - lotBalanceBefore}`);
 	});
 
-	it("2.check total return for each user bet values in eth", async () => {
+	it("2.check total return for each user Prediction values in eth", async () => {
 		accounts = [user1, user2, user3, user4, user5, user6, user7, user8, user9, user10];
 		options = [2, 2, 2, 3, 1, 1, 2, 3, 3, 2];
 		getReturnsInEth = async (user) => {
@@ -324,19 +340,10 @@ contract("Market", async function([user1, user2]) {
 		plotusNewInstance = await Plotus.at(plotusNewAddress);
 		marketConfig = await plotusNewInstance.marketUtility();
 		marketConfig = await MarketConfig.at(marketConfig);
-		// console.log(await plotusNewInstance.getOpenMarkets());
-
-		// let operatorNow = await BLOTInstance.operator();
-		// assert.equal(operatorNow, "0x0000000000000000000000000000000000000000");
-
-		// let receipt = await BLOTInstance.changeOperator.call(user1);
-		// operatorNow = await BLOTInstance.operator();
-		// assert.equal(receipt, true);
-		// assert.equal(operatorNow, user1);
+		
 
 		let isMinter = await BLOTInstance.isMinter(user1);
-		// assert.equal(isMinter, false);
-		// isMinter = await BLOTInstance.isMinter(user1);
+		
 		assert.equal(isMinter, true);
 
 		isMinter = await BLOTInstance.isMinter(user2);
@@ -358,5 +365,76 @@ contract("Market", async function([user1, user2]) {
 			await BLOTInstance.transfer("0x0000000000000000000000000000000000000000", 10, { from: user1 });
 			assert.fail();
 		} catch (e) {}
+	});
+});
+
+contract("More cases for airdrop", async function([user1, user2]) {
+	it("Should Revert if deployed with null address as plot token, blot token", async () => {
+		let  endDate = (await latestTime())/1+(24*3600);
+		await assertRevert(Airdrop.new(nullAddress, user1, endDate, toWei(10)));
+		await assertRevert(Airdrop.new(user1, nullAddress, endDate, toWei(10)));
+	});
+	it("Should Revert if deployed with past time as end date", async () => {
+		let  endDate = (await latestTime())/1-(24);
+		await assertRevert(Airdrop.new(user1, user1, endDate, toWei(10)));
+	});
+	it("Should Revert if non owner calls airdropBLot, user array have different length than amount array", async () => {
+		let  endDate = (await latestTime())/1+(24*3600);
+		let _airdrop = await Airdrop.new(plotusToken.address, BLOTInstance.address, endDate, toWei(100));
+		await assertRevert(_airdrop.airdropBLot([],[],{from:user2}));
+		await assertRevert(_airdrop.airdropBLot([user1,user2],[toWei(10)]));
+	});
+	it("Should Revert if tries to allocate after end date, null address in user list, 0 amount in amount list", async () => {
+		let  endDate = (await latestTime())/1+(24*3600);
+		let _airdrop = await Airdrop.new(plotusToken.address, BLOTInstance.address, endDate, toWei(10));
+		await assertRevert(_airdrop.airdropBLot([nullAddress],[toWei(10)]));
+		await assertRevert(_airdrop.airdropBLot([user1],[0]));
+		await increaseTime(24*3600);
+		await assertRevert(_airdrop.airdropBLot([user1],[toWei(10)]));
+	});
+	it("Should Revert if tries to allocate multiple times to same user, non owner tries to call takeLeftOverPlot, tries to call takeLeftOverPlot before end date", async () => {
+		let  endDate = (await latestTime())/1+(24*3600);
+		let _airdrop = await Airdrop.new(plotusToken.address, BLOTInstance.address, endDate, toWei(100));
+		await assertRevert(_airdrop.takeLeftOverPlot());
+		await assertRevert(_airdrop.takeLeftOverPlot({from:user2}));
+		await _airdrop.airdropBLot([user1],[toWei(10)]);
+		await assertRevert(_airdrop.airdropBLot([user1],[toWei(10)]));
+	});
+	it("Should Revert if tries to claim after end date, user can not claim multiple time", async () => {
+		let  endDate = (await latestTime())/1+(24*3600);
+		let _airdrop = await Airdrop.new(plotusToken.address, BLOTInstance.address, endDate, toWei(100));
+		await _airdrop.airdropBLot([user1],[toWei(10)]);
+		await plotusToken.transfer(_airdrop.address, toWei(30));
+		await BLOTInstance.addMinter(_airdrop.address);
+		await _airdrop.claim({from:user1});
+		await assertRevert(_airdrop.claim({from:user1}));
+		await increaseTime(24*3600);
+		await assertRevert(_airdrop.claim({from:user1}));
+	});
+	it("Should be able to take back plot toekens after end date", async () => {
+		let  endDate = (await latestTime())/1+(24*3600);
+		let _airdrop = await Airdrop.new(plotusToken.address, BLOTInstance.address, endDate, toWei(100));
+		await plotusToken.transfer(_airdrop.address, toWei(30));
+		await increaseTime(24*3600);
+		await _airdrop.takeLeftOverPlot();
+		assert.equal(await plotusToken.balanceOf(_airdrop.address), 0);
+	});
+	it("Owner should be able to transfer ownership to other address", async () => {
+		let  endDate = (await latestTime())/1+(24*3600);
+		let _airdrop = await Airdrop.new(plotusToken.address, BLOTInstance.address, endDate, toWei(100));
+		assert.equal(await _airdrop.owner(), user1);
+		await _airdrop.tranferOwnership(user2);
+		assert.equal(await _airdrop.owner(), user2);
+	});
+	it("Should revert if tries to transfer ownership to null address", async () => {
+		let  endDate = (await latestTime())/1+(24*3600);
+		let _airdrop = await Airdrop.new(plotusToken.address, BLOTInstance.address, endDate, toWei(100));
+		await assertRevert(_airdrop.tranferOwnership(nullAddress));
+	});
+	it("Should revert if tries to allocate more than budget", async () => {
+		let  endDate = (await latestTime())/1+(24*3600);
+		let _airdrop = await Airdrop.new(plotusToken.address, BLOTInstance.address, endDate, toWei(100));
+		await _airdrop.airdropBLot([user1],[toWei(50)]);
+		await assertRevert(_airdrop.airdropBLot([user2],[toWei(51)]));
 	});
 });

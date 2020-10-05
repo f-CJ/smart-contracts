@@ -6,12 +6,15 @@ const Plotus = artifacts.require("MarketRegistry");
 const Master = artifacts.require("Master");
 const MarketConfig = artifacts.require("MockConfig");
 const PlotusToken = artifacts.require("MockPLOT");
+const Governance = artifacts.require("Governance");
+const MockchainLinkBTC = artifacts.require("MockChainLinkAggregator");
 const BLOT = artifacts.require("BLOT");
 const MockUniswapRouter = artifacts.require("MockUniswapRouter");
 const BigNumber = require("bignumber.js");
 const { increaseTimeTo } = require("./utils/increaseTime.js");
 
 const web3 = Market.web3;
+const assertRevert = require("./utils/assertRevert.js").assertRevert;
 const increaseTime = require("./utils/increaseTime.js").increaseTime;
 const latestTime = require("./utils/latestTime.js").latestTime;
 // get etherum accounts
@@ -28,10 +31,11 @@ let timeNow,
 	option2RangeMAX,
 	option3RangeMIX,
 	marketStatus,
-	option3RangeMAX;
+	option3RangeMAX, governance,
+	marketETHBalanceBeforeDispute;
 
-contract("Market", async function([user1, user2, user3, user4, user5, user6, user7, user8, user9, user10]) {
-	describe("Place the bets with ether", async () => {
+contract("Market", async function([user1, user2, user3, user4, user5, user6, user7, user8, user9, user10, user11]) {
+	describe("Place the predictions with ether", async () => {
 		it("0.0", async () => {
 			masterInstance = await OwnedUpgradeabilityProxy.deployed();
 			masterInstance = await Master.at(masterInstance.address);
@@ -39,6 +43,8 @@ contract("Market", async function([user1, user2, user3, user4, user5, user6, use
 			BLOTInstance = await BLOT.deployed();
 			MockUniswapRouterInstance = await MockUniswapRouter.deployed();
 			plotusNewAddress = await masterInstance.getLatestAddress(web3.utils.toHex("PL"));
+			governance = await masterInstance.getLatestAddress(web3.utils.toHex("GV"));
+			governance = await Governance.at(governance);
 			plotusNewInstance = await Plotus.at(plotusNewAddress);
 			marketConfig = await plotusNewInstance.marketUtility();
 			marketConfig = await MarketConfig.at(marketConfig);
@@ -64,12 +70,16 @@ contract("Market", async function([user1, user2, user3, user4, user5, user6, use
 			option3RangeMAX = parseFloat(marketData[2][2]);
 		});
 
+		it("Should not allow to initiate market from unauthorized address", async() => {
+			await assertRevert(marketInstance.initiate(1,1,1,1));
+		})
+
 		it("0.1 Assert values from getData()", async () => {
 			assert.equal(option1RangeMIN, 0);
-			assert.equal(option1RangeMAX, 925649804322);
-			assert.equal(option2RangeMIN, 925649804323);
-			assert.equal(option2RangeMAX, 944349800369);
-			assert.equal(option3RangeMIX, 944349800370);
+			assert.equal(option1RangeMAX, 932699999999);
+			assert.equal(option2RangeMIN, 932700000000);
+			assert.equal(option2RangeMAX, 937400000000);
+			assert.equal(option3RangeMIX, 937400000001);
 			assert.equal(option3RangeMAX, 1.157920892373162e77);
 			assert.equal(parseFloat(marketData._optionPrice[0]), priceOption1);
 			assert.equal(parseFloat(marketData._optionPrice[1]), priceOption2);
@@ -157,7 +167,7 @@ contract("Market", async function([user1, user2, user3, user4, user5, user6, use
 			});
 			await marketInstance.placePrediction(plotusToken.address, "210000000000000000000", 2, 2, { from: user3 });
 			// user 4
-			// place bets with ether
+			// place predictions with ether
 			// await BLOTInstance.approve(
 			//   openMarkets["_openMarkets"][0],
 			//   "123000000000000000000",
@@ -229,23 +239,30 @@ contract("Market", async function([user1, user2, user3, user4, user5, user6, use
 			});
 		});
 
-		it("0.5 Assert values from getData() _assetStaked", async () => {
+		it("0.5 Cannot place prediction more than max prediction amount", async ()=> {
+			await assertRevert(marketInstance.placePrediction("0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE", "29000000000000000000", 2, 4, {
+				value: "29000000000000000000",
+				from: user10
+			}));
+		});
+
+		it("0.6 Assert values from getData() _assetStaked", async () => {
 			marketData = await marketInstance.getData();
 			assert.equal(parseFloat(web3.utils.fromWei(marketData._ethStaked[0])).toFixed(1), (3).toFixed(1));
 			assert.equal(parseFloat(web3.utils.fromWei(marketData._ethStaked[1])).toFixed(1), (3).toFixed(1));
 			assert.equal(parseFloat(web3.utils.fromWei(marketData._ethStaked[2])).toFixed(1), (4).toFixed(1));
 		});
 
-		it("1.0 Bet Points allocated properly in ether", async () => {
+		it("1.0 prediction Points allocated properly in ether", async () => {
 			accounts = [user1, user2, user3, user4, user5, user6, user7, user8, user9, user10];
 			options = [2, 2, 2, 3, 1, 1, 2, 3, 3, 2];
-			getBetPoints = async (user, option, expected) => {
-				// return bet points of user
-				let betPoins = await marketInstance.getUserPredictionPoints(user, option);
-				betPoins = betPoins / 1;
-				return betPoins;
+			getPredictionPoints = async (user, option, expected) => {
+				// return prediction points of user
+				let PredictionPoins = await marketInstance.getUserPredictionPoints(user, option);
+				PredictionPoins = PredictionPoins / 1;
+				return PredictionPoins;
 			};
-			betPointsExpected = [
+			PredictionPointsExpected = [
 				1.755503471,
 				83.41726908,
 				11.21889102,
@@ -257,26 +274,26 @@ contract("Market", async function([user1, user2, user3, user4, user5, user6, use
 				36.98149537,
 				721.7363059,
 			];
-			// console.log("bet points for user 1");
-			// betPointsUser1 = await getBetPoints(accounts[0], options[0]);
-			// betPointsUser3 = await getBetPoints(accounts[2], options[2]);
+			// console.log("prediction points for user 1");
+			// PredictionPointsUser1 = await getPredictionPoints(accounts[0], options[0]);
+			// PredictionPointsUser3 = await getPredictionPoints(accounts[2], options[2]);
 
 			// console.log(
-			//   `bet points : ${betPointsUser1} expected : ${betPointsExpected[0]} `
+			//   `prediction points : ${PredictionPointsUser1} expected : ${PredictionPointsExpected[0]} `
 			// );
-			// console.log("bet points for user 3");
+			// console.log("prediction points for user 3");
 			// console.log(
-			//   `bet points : ${betPointsUser3} expected : ${betPointsExpected[2]} `
+			//   `prediction points : ${PredictionPointsUser3} expected : ${PredictionPointsExpected[2]} `
 			// );
 
 			for (let index = 0; index < 10; index++) {
-				let betPoints = await getBetPoints(accounts[index], options[index]);
-				betPoints = betPoints / 1000;
-				betPoints = betPoints.toFixed(1);
-				await assert(betPoints === betPointsExpected[index].toFixed(1));
+				let PredictionPoints = await getPredictionPoints(accounts[index], options[index]);
+				PredictionPoints = PredictionPoints / 1000;
+				PredictionPoints = PredictionPoints.toFixed(1);
+				await assert(PredictionPoints === PredictionPointsExpected[index].toFixed(1));
 				// commented by parv (added a assert above)
 				// console.log(`user${index + 1} : option : ${options[index]}  `);
-				// console.log(`bet points : ${betPoints} expected : ${betPointsExpected[index].toFixed(1)} `);
+				// console.log(`prediction points : ${PredictionPoints} expected : ${PredictionPointsExpected[index].toFixed(1)} `);
 			}
 			// console.log(await plotusToken.balanceOf(user1));
 		});
@@ -286,12 +303,47 @@ contract("Market", async function([user1, user2, user3, user4, user5, user6, use
 			assert.equal(parseFloat(marketData._predictionStatus), 0);
 		});
 
-		it("1.2", async () => {
-			// close market
-			await increaseTime(36001);
-			await marketInstance.calculatePredictionResult(1);
-			await increaseTime(36001);
+		it("1.2 Should not close market if time is not reached", async() => {
+			await marketInstance.settleMarket();
+			marketData = await marketInstance.getData();
+			assert.equal(parseFloat(marketData._predictionStatus), 0);
 		});
+
+		it("1.3 Should not close market if closing value is zero", async () => {
+			let MockchainLinkInstance = await MockchainLinkBTC.deployed();
+			await MockchainLinkInstance.setLatestAnswer(1);
+			await increaseTime(36001);
+			await assertRevert(marketInstance.calculatePredictionResult(0));
+			await MockchainLinkInstance.setLatestAnswer("10000000000000000000");
+			await MockchainLinkInstance.setLatestAnswer("10000000000000000000");
+		});
+
+		it("1.3", async () => {
+			await marketInstance.settleMarket();
+		});
+
+		it("Cannot place prediction after prediction time", async ()=> {
+			await assertRevert(marketInstance.placePrediction("0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE", "1000000000", 2, 4, {
+				value: "1000000000",
+				from: user10
+			}));
+		});
+
+		it("Raise dispute and reject", async() => {
+			await plotusToken.transfer(user11, "200000000000000000000");
+			await plotusToken.approve(marketInstance.address, "100000000000000000000", {
+				from: user11,
+			});
+			let proposalId = await governance.getProposalLength();
+			let marketETHBalanceBeforeDispute = await web3.eth.getBalance(marketInstance.address);
+			let registryBalanceBeforeDispute = await web3.eth.getBalance(plotusNewInstance.address);
+			await marketInstance.raiseDispute("100000000000000000000","","","", {from: user11});
+			await increaseTime(604810);
+			await governance.closeProposal(proposalId/1);
+			let balanceAfterClosingDispute = await web3.eth.getBalance(marketInstance.address);
+			assert.equal(marketETHBalanceBeforeDispute/1, balanceAfterClosingDispute/1);
+		});
+
 		it("1.3 Assert values from getData() prediction status after", async () => {
 			marketData = await marketInstance.getData();
 			assert.equal(parseFloat(marketData._predictionStatus), 4);
@@ -326,7 +378,7 @@ contract("Market", async function([user1, user2, user3, user4, user5, user6, use
 			// console.log(`Difference : ${lotBalanceAfter - lotBalanceBefore}`);
 		});
 
-		it("2.check total return for each user bet values in eth", async () => {
+		it("2.check total return for each user prediction values in eth", async () => {
 			accounts = [user1, user2, user3, user4, user5, user6, user7, user8, user9, user10];
 			options = [2, 2, 2, 3, 1, 1, 2, 3, 3, 2];
 			getReturnsInEth = async (user) => {
@@ -365,7 +417,7 @@ contract("Market", async function([user1, user2, user3, user4, user5, user6, use
 				diff = diff / conv;
 				diff = diff.toFixed(2);
 				expectedInEth = returnInEthExpected[accounts.indexOf(account)].toFixed(2);
-				assert.equal(diff, expectedInEth);
+				assert.equal(diff*1, expectedInEth*1);
 
 				diffToken = afterClaimToken - beforeClaimToken;
 				diffToken = diffToken / conv;
